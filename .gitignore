@@ -1,0 +1,14 @@
+﻿.env
+*.env
+**/__pycache__/
+**/.pytest_cache/
+**/.DS_Store
+**/node_modules/
+**/dist/
+**/.venv/
+**/venv/
+**/.idea/
+**/.vscode/
+**/*.log
+# Docker/Rancher runtime artifacts
+**/.terraform/

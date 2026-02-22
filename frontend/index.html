@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MIMR – Company Graph Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>MIMR Sandbox</h1>
+    <p class="sub">Explore company structures: ownership stakes and governance links.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Graph View</h2>
+
+      <div class="controls">
+        <label for="companySelect">Company</label>
+        <select id="companySelect"></select>
+
+        <label class="chk">
+          <input type="checkbox" id="effectiveToggle" />
+          Show effective ownership (indirect)
+        </label>
+
+        <button id="renderBtn">Render</button>
+
+        <!-- View toggle -->
+        <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
+          <label class="chk"><input type="radio" name="view" value="ownership" checked> Ownership</label>
+          <label class="chk"><input type="radio" name="view" value="governance"> Governance</label>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span class="badge badge-company">Company</span>
+        <span class="badge badge-person">Person</span>
+        <span class="edge-note">Ownership: % stake &nbsp; | &nbsp; Governance: role (Chair/CEO/Board/Auditor)</span>
+      </div>
+
+      <div id="cy" style="height:520px;border:1px solid #e5e7eb;border-radius:8px;"></div>
+
+      <div id="panel" class="card" style="margin-top:12px">
+        <h3 id="panelTitle">Details</h3>
+        <div id="panelBody" class="panel-body">Choose a company, pick a view, then click Render.</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- API-driven script (fetches from /ownership/... or /governance/...) -->
+  <script src="ownership.js?v=10"></script>
+</body>
+</html>
