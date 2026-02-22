@@ -1,6 +1,6 @@
 import React from "react";
-import "./css/NavBar.css";
-import logo from "../assets/logo.png"; // your logo file
+import "../css/Navbar.css";
+import logo from "../assets/logo.jpg"; // your logo file
 
 const Navbar = () => {
   return (
@@ -9,7 +9,7 @@ const Navbar = () => {
         <img src={logo} alt="MiMR Analytics" className="logo" />
       </div>
       <div className="navbar-right">
-        <a href="/signin" className="signin-link">SignIn/SignUp</a>
+        <a href="/signin" className="signin-link">About Us|SignIn</a>
       </div>
     </nav>
   );

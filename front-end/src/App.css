@@ -1,0 +1,41 @@
+/* App.css */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #ffffff;
+}
+
+.main-content {
+  flex: 1;
+  width: 100vw;                 /* 🔹 full viewport width */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;      /* 🔹 vertical centering */
+  background-color: #717187;
+  background-size: 2 rem;    /* muted dark-blue/gray */
+  padding: 6rem 2rem;
+  text-align: center;
+  position: relative;              /* 🔹 for absolute centering */
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;           /* 🔹 ensures true full-width for centered container */
+  margin-right: -50vw;
+  margin-top: 8rem;              /* 🔹 adjust as needed to pull up the content */
+
+  max-height: 50vh;             /* Adjust the value as needed */
+  overflow: hidden; 
+  
+}
+
+.main-heading {
+  color: #111;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin-bottom: 1.5rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  text-align: center;
+}

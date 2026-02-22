@@ -1,19 +1,21 @@
 import React from "react";
-import Navbar from "./components/NavBar";
+import Navbar from "./components/Navbar";
 import SearchBar from "./components/SearchBar";
-import OptionButtons from "./components/OptionButtons";
-import "./css/App.css";
+import "./App.css";
 
-const App = () => {
+function App() {
   return (
     <div className="app">
       <Navbar />
+
       <main className="main-content">
+        <h2 className="main-heading">
+          EXPLORE COMPANIES STRUCTURE : AUDITING MADE SIMPLE
+        </h2>
         <SearchBar />
-        <OptionButtons />
       </main>
     </div>
   );
-};
+}
 
 export default App;

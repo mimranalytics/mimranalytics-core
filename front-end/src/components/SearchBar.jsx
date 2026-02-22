@@ -1,6 +1,6 @@
 import React from "react";
 import { FaSearch } from "react-icons/fa";
-import "./css/SearchBar.css";
+import "../css/SearchBar.css";
 
 const SearchBar = () => {
   return (

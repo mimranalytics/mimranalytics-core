@@ -1,8 +1,8 @@
 import React from "react";
-import "./css/OptionButtons.css";
+import "../css/OptionButtons.css";
 
 const options = [
-  "Bettty",
+  "Governance",
   "Ownership",
   "Show effective ownership (indirect)"
 ];
