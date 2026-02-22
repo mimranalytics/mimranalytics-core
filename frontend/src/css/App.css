@@ -1,0 +1,39 @@
+/* Apply base font and reset defaults */
+body, html, #root {
+    margin: 0;
+    padding: 0;
+    font-family: "Inter", Arial, sans-serif;
+    background-color: #ffffff;
+    height: 100%;
+  }
+  
+  /* Wrapper for the entire app */
+  .app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  
+  /* Main content area under the navbar */
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 3rem;
+    text-align: center;
+  }
+  
+  /* Optional smooth transitions for UI interactions */
+  button, input {
+    transition: all 0.2s ease-in-out;
+  }
+  
+  /* Simple responsive tweak */
+  @media (max-width: 768px) {
+    .main-content {
+      padding: 2rem 1rem;
+    }
+  }
+  

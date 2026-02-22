@@ -1,0 +1,22 @@
+.options-container {
+    display: flex;
+    justify-content: center;
+    gap: 5rem;
+    margin-top: 2rem;
+  }
+  
+  .option-item {
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    color: #000;
+  }
+  
+  .indicator {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    background-color: #d9d9d9;
+    margin-right: 0.75rem;
+  }
+  
