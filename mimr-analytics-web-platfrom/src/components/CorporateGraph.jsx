@@ -20,9 +20,15 @@ const LAYOUT = {
   coolingFactor:     0.99,
   minTemp:           1.0,
   fit:               true,
-  padding:           80,
+  padding:           120,
   randomize:         true,
 };
+
+// After layout runs, clamp zoom so a single node doesn't fill the canvas
+function clampZoom(cy) {
+  if (cy.zoom() > 1.2) cy.zoom({ level: 1.2, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+  cy.center();
+}
 
 export default function CorporateGraph({ entityId, onNodeSelect }) {
   const cyRef          = useRef(null);
@@ -84,7 +90,9 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
     if (!cyRef.current || cyElements.length === 0) return;
     const t = setTimeout(() => {
       cyRef.current.resize();
-      cyRef.current.layout(LAYOUT).run();
+      const layout = cyRef.current.layout(LAYOUT);
+      layout.on("layoutstop", () => clampZoom(cyRef.current));
+      layout.run();
     }, 100);
     return () => clearTimeout(t);
   }, [cyElements]);

@@ -114,20 +114,30 @@ export async function searchEntities(query) {
     : Array.isArray(data.data)       ? data.data
     : [];
 
-  console.log("[MIMR] Search raw items:", raw);
+  // Log every key in the first result so we can see exactly what BolagsAPI sends
+  if (raw.length > 0) {
+    console.log("[MIMR] First search result keys:", Object.keys(raw[0]));
+    console.log("[MIMR] First search result full:", raw[0]);
+  }
 
-  return raw.map((c) => ({
-    id:           pick(c, "org_number", "orgNumber", "organisationsnummer", "id"),
-    name:         pick(c, "name", "company_name", "namn", "companyName"),
-    regNumber:    pick(c, "org_number", "orgNumber", "organisationsnummer"),
-    type:         "company",
-    // Try every known status field name — log the raw object above
-    // to see which one BolagsAPI actually sends for your account
-    status:       normaliseStatus(
-                    pick(c, "status", "company_status", "bolagsstatus", "active", "is_active")
-                  ),
-    jurisdiction: "Sweden",
-  }));
+  return raw.map((c) => {
+    // Try every known org-number field name, then scan all values for a 10-digit number
+    const orgNumber =
+      pick(c, "org_number", "orgNumber", "organisationsnummer", "orgnr",
+              "registration_number", "registrationNumber", "company_id") ??
+      Object.values(c).find(
+        (v) => typeof v === "string" && /^\d{6,10}$/.test(v.replace(/[\s-]/g, ""))
+      )?.replace(/[\s-]/g, "");
+
+    const name   = pick(c, "name", "company_name", "namn", "companyName", "foretagsnamn");
+    const status = normaliseStatus(
+      pick(c, "status", "company_status", "bolagsstatus", "active", "is_active", "aktiv")
+    );
+
+    console.log(`[MIMR] Mapped: id="${orgNumber}" name="${name}" status="${status}"`);
+
+    return { id: orgNumber, name, regNumber: orgNumber, type: "company", status, jurisdiction: "Sweden" };
+  });
 }
 
 /**
@@ -169,8 +179,23 @@ export async function fetchEntityGraph(orgNumber) {
     (Array.isArray(subsData) ? subsData : [])
   );
 
-  // ── Root company ID ────────────────────────────────────────
-  const rootId = pick(company, "org_number", "orgNumber", "organisationsnummer") ?? orgNumber;
+  // Log raw API response so we can see the exact field names BolagsAPI sends
+  console.log("[MIMR] Raw company keys:", Object.keys(company));
+  console.log("[MIMR] Raw company:", company);
+  console.log("[MIMR] board count:", board.length, "| owners count:", owners.length, "| subs count:", subsidiaries.length);
+  if (board.length > 0)  console.log("[MIMR] First board member:", board[0]);
+  if (owners.length > 0) console.log("[MIMR] First owner:", owners[0]);
+
+  // Extract root ID — try every known field name, then scan for numeric org number
+  const rootId =
+    pick(company, "org_number", "orgNumber", "organisationsnummer", "orgnr",
+                  "registration_number", "registrationNumber", "id", "company_id") ??
+    Object.values(company).find(
+      (v) => typeof v === "string" && /^[0-9]{6,10}$/.test(v.replace(/[\s-]/g, ""))
+    )?.replace(/[\s-]/g, "") ??
+    orgNumber;
+
+  console.log("[MIMR] Resolved rootId:", rootId);
 
   // ── Nodes ──────────────────────────────────────────────────
   const nodes = [
