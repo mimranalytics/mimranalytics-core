@@ -31,6 +31,7 @@ export const SERVICES = [
   },
 ];
 
+//TODO: update stats with real numbers from the database
 export const STATS = [
   { num: "8.2M+",  label: "Companies indexed" },
   { num: "180+",   label: "Jurisdictions covered" },
