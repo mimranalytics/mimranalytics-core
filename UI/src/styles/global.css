@@ -1,0 +1,73 @@
+/* ─────────────────────────────────────────────
+   MIMR ANALYTICS — GLOBAL STYLES
+   Dark navy intelligence theme, gold accents
+───────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--navy); font-family: var(--sans); color: var(--text); -webkit-font-smoothing: antialiased; }
+
+:root {
+  --navy:         #080d14;
+  --navy-2:       #0e1724;
+  --navy-3:       #111e30;
+  --navy-4:       #162438;
+  --border:       rgba(255,255,255,0.07);
+  --border-hover: rgba(255,255,255,0.15);
+  --gold:         #c9a84c;
+  --gold-light:   #e2c57a;
+  --gold-dim:     rgba(201,168,76,0.15);
+  --cyan:         #4fc3c3;
+  --cyan-dim:     rgba(79,195,195,0.12);
+  --text:         #e8edf5;
+  --text-2:       #8a97aa;
+  --text-3:       #4a5568;
+  --serif: 'Playfair Display', Georgia, serif;
+  --sans:  'IBM Plex Sans', sans-serif;
+  --mono:  'IBM Plex Mono', monospace;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--navy); }
+::-webkit-scrollbar-thumb { background: var(--navy-4); border-radius: 4px; }
+
+.page { position: relative; z-index: 1; font-family: var(--sans); color: var(--text); }
+
+.section { padding: 100px 48px; max-width: 1200px; margin: 0 auto; }
+.section-label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--gold); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.section-label::before { content: ''; width: 24px; height: 1px; background: var(--gold); }
+.section-title { font-family: var(--serif); font-size: 46px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 16px; }
+.section-title em { font-style: italic; color: var(--gold); }
+.section-sub { font-size: 16px; color: var(--text-2); line-height: 1.75; font-weight: 300; max-width: 560px; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+.btn-gold {
+  background: var(--gold); color: var(--navy); border: none; cursor: pointer;
+  font-family: var(--sans); font-size: 13px; font-weight: 600;
+  padding: 14px 32px; border-radius: 6px; letter-spacing: 0.08em; text-transform: uppercase;
+  transition: all 0.2s;
+}
+.btn-gold:hover { background: var(--gold-light); transform: translateY(-2px); }
+
+.btn-outline {
+  background: transparent; color: var(--text); border: 1px solid var(--border-hover);
+  cursor: pointer; font-family: var(--sans); font-size: 13px; font-weight: 500;
+  padding: 13px 30px; border-radius: 6px; letter-spacing: 0.06em; text-transform: uppercase;
+  transition: all 0.2s;
+}
+.btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+
+.graph-svg { width: 100%; height: 260px; }
+.node-pulse { animation: nodepulse 2.5s ease-in-out infinite; }
+@keyframes nodepulse { 0%,100%{opacity:0.3} 50%{opacity:0.7} }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+@media(max-width:900px) {
+  .section{padding:70px 20px}
+  .section-title{font-size:36px}
+}
+@media(max-width:600px) { .section-title{font-size:28px} }
