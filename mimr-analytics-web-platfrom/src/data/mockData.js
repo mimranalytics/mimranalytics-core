@@ -1,4 +1,5 @@
 // ─── SEARCH ───────────────────────────────────────────
+//TODO: replace with real search results from data team once available. These are placeholders for now to illustrate the section layout and design.
 export const SAMPLE_QUERIES = [
   "BP PLC",
   "Tesco Stores Ltd",
