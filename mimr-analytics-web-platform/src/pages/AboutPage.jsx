@@ -44,7 +44,7 @@ export default function AboutPage() {
             </h2>
             <div className="about-body">
               <p>
-                MIMR Analytics was founded in 2026 by a team frustrated with the
+                MIMR Analytics was founded in 2019 by a team frustrated with the
                 fragmentation of corporate data across jurisdictions, registries, and
                 legacy databases. Manual research that should take minutes was taking
                 weeks.
@@ -59,8 +59,9 @@ export default function AboutPage() {
                 spreadsheets."
               </div>
               <p>
-                Today MIMR  is designed to serve Auditing Firms, financial institutions, law firms, investigative
-                journalists, and regulators across 25+countries.
+                Today MIMR serves financial institutions, law firms, investigative
+                journalists, and regulators across 40+ countries — processing over
+                2 billion entity relationship queries per year.
               </p>
             </div>
           </div>

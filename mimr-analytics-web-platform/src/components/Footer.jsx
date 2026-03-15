@@ -45,7 +45,7 @@ export default function Footer() {
         </div>
 
         <div className="footer-copy">
-          © 2026 MIMR Analytics Ltd. All rights reserved.
+          © 2025 MIMR Analytics Ltd. All rights reserved.
         </div>
       </div>
     </div>

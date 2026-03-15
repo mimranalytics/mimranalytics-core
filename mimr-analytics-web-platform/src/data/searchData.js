@@ -1,5 +1,4 @@
 // Sample query suggestions shown on the hero search
-// TODO: In a real application, these would be dynamically generated based on popular searches or user history
 export const SAMPLE_QUERIES = [
   "BP PLC",
   "Tesco Stores Ltd",
@@ -8,7 +7,6 @@ export const SAMPLE_QUERIES = [
 ];
 
 // Mock entity results returned for any search query
-//TODO: In a real application, these would be fetched from an API based on the search query, and would include more detailed information and connections
 export const MOCK_ENTITIES = [
   {
     id: 1,
@@ -64,7 +62,6 @@ export const MOCK_ENTITIES = [
 ];
 
 // Connection-type colour legend
-//TODO : In a real application, this would likely be dynamically generated based on the types of connections present in the data, and could include more connection types and colors
 export const CONNECTION_LEGEND = [
   { color: "#4fc3c3", label: "Subsidiary / Child entity" },
   { color: "#c9a84c", label: "Director / Officer" },

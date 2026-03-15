@@ -1,25 +1,25 @@
 export const TEAM = [
   {
-    initials: "Mr.",
-    name: "Joakim",
-    role: "Founder",
-    bio: "tyc yshisho iouojpac yhghso yyhaoho buyascgiac  hiasch bcaoic atsgi  isgsudbsusjshshs",
+    initials: "MK",
+    name: "Mira Kaur",
+    role: "CEO & Co-founder",
+    bio: "Former Head of Financial Intelligence at HSBC. 18 years building corporate surveillance systems for Tier 1 banks.",
     bg: "#1a2a20",
     fg: "#4fc3c3",
   },
   {
-    initials: "Mr.",
-    name: "Kevin",
-    role: "Founder",
-    bio: "tyc yshisho iouojpac yhghso yyhaoho buyascgiac  hiasch bcaoic atsgi  isgsudbsusjshshs.",
+    initials: "IR",
+    name: "Ivan Radović",
+    role: "CTO & Co-founder",
+    bio: "PhD in graph neural networks from ETH Zürich. Previously built knowledge graph systems at Palantir Technologies.",
     bg: "#1a1a2a",
     fg: "#8b7cf6",
   },
   {
-    initials: "Ms.",
-    name: "Betelhem",
-    role: "Co-Founder",
-    bio: "tyc yshisho iouojpac yhghso yyhaoho buyascgiac  hiasch bcaoic atsgi  isgsudbsusjshshs.",
+    initials: "AO",
+    name: "Amara Osei",
+    role: "Chief Data Officer",
+    bio: "Former Director at Companies House. Expert in cross-jurisdictional corporate registry data and entity resolution at scale.",
     bg: "#2a1a1a",
     fg: "#e8807a",
   },
@@ -47,9 +47,12 @@ export const VALUES = [
     desc: "Designed by people who have sat at the analyst's desk. Every feature exists to reduce friction in real investigative workflows.",
   },
 ];
+
 export const COVERAGE = [
   { label: "UK Companies House",      pct: 100, color: "#c9a84c" },
+  { label: "SEC / EDGAR (USA)",       pct: 95,  color: "#4fc3c3" },
   { label: "EU Business Registers",   pct: 87,  color: "#8b7cf6" },
+  { label: "OFAC / UN Sanctions",     pct: 100, color: "#e8807a" },
   { label: "OpenCorporates",          pct: 78,  color: "#4fc3c3" },
   { label: "Beneficial Ownership Data",pct: 65,  color: "#c9a84c" },
 ];

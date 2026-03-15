@@ -31,10 +31,9 @@ export const SERVICES = [
   },
 ];
 
-//TODO: update stats with real numbers from the database
 export const STATS = [
-  { num: "10+",  label: "Companies indexed" },
-  { num: "23+",   label: "Jurisdictions covered" },
+  { num: "8.2M+",  label: "Companies indexed" },
+  { num: "180+",   label: "Jurisdictions covered" },
   { num: "40M+",   label: "Director records" },
   { num: "99.97%", label: "Data accuracy rate" },
 ];
