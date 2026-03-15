@@ -1,16 +1,3 @@
-/**
- * CorporateGraph.jsx
- * ─────────────────────────────────────────────────────────────
- * Full-featured Cytoscape.js corporate entity graph.
- *
- * Fixes applied vs original:
- *  - Canvas given explicit px height (Cytoscape can't measure % in flex)
- *  - cy callback uses useRef not useCallback to avoid stale closures
- *  - ResizeObserver calls cy.resize() + fit() when container size changes
- *  - Layout runs after a tick delay so DOM is settled before positioning
- * ─────────────────────────────────────────────────────────────
- */
-
 import { useEffect, useRef, useState } from "react";
 import CytoscapeComponent from "react-cytoscapejs";
 import { useEntityGraph }  from "../hooks/useEntityGraph";
@@ -20,7 +7,6 @@ import GraphToolbar        from "./GraphToolbar";
 import GraphLegend         from "./GraphLegend";
 import "./CorporateGraph.css";
 
-/* ── Layout config ─────────────────────────────────────────── */
 const LAYOUT = {
   name:              "cose",
   animate:           true,
@@ -39,9 +25,9 @@ const LAYOUT = {
 };
 
 export default function CorporateGraph({ entityId, onNodeSelect }) {
-  const cyRef          = useRef(null);       // holds the cytoscape instance
-  const wrapRef        = useRef(null);       // holds the canvas-wrap DOM node
-  const expandRef      = useRef(null);       // keeps expandNode stable in event handlers
+  const cyRef          = useRef(null);
+  const wrapRef        = useRef(null);
+  const expandRef      = useRef(null);
 
   const [selectedNode, setSelectedNode] = useState(null);
   const [panelOpen,    setPanelOpen]    = useState(false);
@@ -49,14 +35,12 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
 
   const { graphData, cyElements, loading, error, expandNode } = useEntityGraph(entityId);
 
-  // Keep expandRef current without re-wiring Cytoscape events
   expandRef.current = expandNode;
 
-  /* ── Wire Cytoscape events — called once by react-cytoscapejs ── */
+  /* ── Wire Cytoscape events ── */
   const handleCyInit = (cy) => {
     cyRef.current = cy;
 
-    // Tap node → highlight + open panel
     cy.on("tap", "node", (evt) => {
       const node = evt.target;
       const data = node.data();
@@ -68,7 +52,6 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
       onNodeSelect?.(data);
     });
 
-    // Tap background → clear
     cy.on("tap", (evt) => {
       if (evt.target === cy) {
         cy.elements().removeClass("dimmed");
@@ -77,7 +60,6 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
       }
     });
 
-    // Double-tap node → expand connections
     cy.on("dbltap", "node", async (evt) => {
       const nodeId = evt.target.id();
       evt.target.addClass("expanded");
@@ -87,7 +69,6 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
       setTimeout(() => cy.layout({ ...LAYOUT, randomize: false }).run(), 50);
     });
 
-    // Hover cursor
     cy.on("mouseover", "node", (evt) => {
       evt.target.addClass("hovered");
       cy.container().style.cursor = "pointer";
@@ -98,10 +79,9 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
     });
   };
 
-  /* ── Run layout whenever elements are loaded / updated ── */
+  /* ── Run layout when elements load ── */
   useEffect(() => {
     if (!cyRef.current || cyElements.length === 0) return;
-    // Small delay lets the DOM finish painting before Cytoscape positions nodes
     const t = setTimeout(() => {
       cyRef.current.resize();
       cyRef.current.layout(LAYOUT).run();
@@ -109,7 +89,7 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
     return () => clearTimeout(t);
   }, [cyElements]);
 
-  /* ── ResizeObserver: re-fit if the container changes size ── */
+  /* ── ResizeObserver ── */
   useEffect(() => {
     if (!wrapRef.current) return;
     const ro = new ResizeObserver(() => {
@@ -121,29 +101,30 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
     return () => ro.disconnect();
   }, []);
 
-  /* ── Toolbar actions ── */
+  /* ── Toolbar ── */
   const fitGraph    = () => cyRef.current?.fit(undefined, 80);
-  const zoomIn      = () => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.zoom({ level: cy.zoom() * 1.3, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
-  };
-  const zoomOut     = () => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.zoom({ level: cy.zoom() * 0.77, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
-  };
+  const zoomIn      = () => { const cy = cyRef.current; if (!cy) return; cy.zoom({ level: cy.zoom() * 1.3, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } }); };
+  const zoomOut     = () => { const cy = cyRef.current; if (!cy) return; cy.zoom({ level: cy.zoom() * 0.77, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } }); };
   const resetLayout = () => cyRef.current?.layout({ ...LAYOUT, randomize: true }).run();
-  const closePanel  = () => {
-    setPanelOpen(false);
-    setSelectedNode(null);
-    cyRef.current?.elements().removeClass("dimmed");
-  };
+  const closePanel  = () => { setPanelOpen(false); setSelectedNode(null); cyRef.current?.elements().removeClass("dimmed"); };
 
   /* ── Render states ── */
-  if (loading) return <GraphSkeleton />;
-  if (error)   return <GraphError message={error.message} />;
-  if (!cyElements.length) return null;
+  if (loading) return <GraphSkeleton entityId={entityId} />;
+  if (error)   return <GraphError message={error.message} entityId={entityId} />;
+
+  // Graph loaded but came back empty — show a clear message instead of blank space
+  if (!cyElements.length) return (
+    <div className="cg-wrapper">
+      <div className="cg-error">
+        <div className="cg-error-icon">◎</div>
+        <div className="cg-error-title">No graph data returned</div>
+        <div className="cg-error-msg">
+          The API returned no nodes for <code style={{ color: "var(--gold)", fontFamily: "var(--mono)", fontSize: 11 }}>{entityId}</code>.
+          <br />Check the browser console for the raw API response.
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="cg-wrapper">
@@ -184,17 +165,10 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
           </div>
         )}
 
-        <GraphToolbar
-          onFit={fitGraph}
-          onZoomIn={zoomIn}
-          onZoomOut={zoomOut}
-          onReset={resetLayout}
-        />
-
+        <GraphToolbar onFit={fitGraph} onZoomIn={zoomIn} onZoomOut={zoomOut} onReset={resetLayout} />
         <GraphLegend />
       </div>
 
-      {/* Slide-in detail panel */}
       <NodeDetailPanel
         node={selectedNode}
         entity={graphData?.entity}
@@ -210,24 +184,33 @@ export default function CorporateGraph({ entityId, onNodeSelect }) {
   );
 }
 
-function GraphSkeleton() {
+function GraphSkeleton({ entityId }) {
   return (
     <div className="cg-wrapper">
       <div className="cg-skeleton">
         <div className="cg-skeleton-pulse" />
-        <div className="cg-skeleton-label">Loading entity graph…</div>
+        <div className="cg-skeleton-label">
+          Loading graph for {entityId}…
+        </div>
       </div>
     </div>
   );
 }
 
-function GraphError({ message }) {
+function GraphError({ message, entityId }) {
   return (
     <div className="cg-wrapper">
       <div className="cg-error">
         <div className="cg-error-icon">⚠</div>
         <div className="cg-error-title">Graph failed to load</div>
-        <div className="cg-error-msg">{message}</div>
+        <div className="cg-error-msg">
+          <code style={{ color: "var(--gold)", fontFamily: "var(--mono)", fontSize: 11 }}>{entityId}</code>
+          <br />{message}
+          <br /><br />
+          <span style={{ color: "var(--text-3)", fontSize: 11 }}>
+            Check the browser console for the full API response.
+          </span>
+        </div>
       </div>
     </div>
   );

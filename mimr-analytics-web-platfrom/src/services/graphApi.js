@@ -3,37 +3,28 @@
  * ─────────────────────────────────────────────────────────────
  * Service layer — wired to the BolagsAPI (bolagsapi.se)
  *
- * SETUP: create a .env file in the project root containing:
+ * SETUP: create a .env file in the project root:
  *   VITE_BOLAGSAPI_KEY=your_key_here
- *
- * Then restart the dev server: npm run dev
- *
- * Without a key the file falls back to built-in mock data.
+ * Then restart: npm run dev
  * ─────────────────────────────────────────────────────────────
  */
 
 const BOLAGSAPI_BASE = "https://api.bolagsapi.se/v1";
 const API_KEY        = import.meta.env.VITE_BOLAGSAPI_KEY ?? "";
 
-// ── Startup log — check the browser console to confirm ──────
 if (API_KEY && API_KEY.trim() !== "") {
-  console.log(
-    "%c[MIMR] BolagsAPI key loaded — using LIVE data",
-    "color:#4fc3c3;font-weight:600;"
-  );
+  console.log("%c[MIMR] BolagsAPI key loaded — using LIVE data", "color:#4fc3c3;font-weight:600;");
 } else {
-  console.warn(
-    "[MIMR] VITE_BOLAGSAPI_KEY not found — using mock data.\n" +
-    "Create a .env file in the project root with:\n" +
-    "  VITE_BOLAGSAPI_KEY=your_key_here\n" +
-    "Then restart npm run dev."
-  );
+  console.warn("[MIMR] VITE_BOLAGSAPI_KEY not found — using mock data.\nCreate .env with: VITE_BOLAGSAPI_KEY=your_key_here\nThen restart npm run dev.");
 }
 
-// Derived flag — true when we have a real key
 const USE_MOCK = !API_KEY || API_KEY.trim() === "";
 
-/* ── Low-level GET helper ─────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════
+   LOW-LEVEL FETCH
+   Logs every raw response so you can inspect the exact field
+   names BolagsAPI sends — open the browser console to see.
+═══════════════════════════════════════════════════════════ */
 async function bolagsGet(path) {
   const res = await fetch(`${BOLAGSAPI_BASE}${path}`, {
     headers: {
@@ -41,24 +32,61 @@ async function bolagsGet(path) {
       "Accept":        "application/json",
     },
   });
+
   if (!res.ok) {
     const body = await res.text().catch(() => res.statusText);
     throw new Error(`BolagsAPI ${res.status} — ${path}: ${body}`);
   }
-  return res.json();
+
+  const json = await res.json();
+  // ── RAW RESPONSE LOG ──────────────────────────────────────
+  // Check browser DevTools → Console to see the exact fields
+  // BolagsAPI returns. Once everything maps correctly you can
+  // remove these console.log lines.
+  console.log(`[BolagsAPI] GET ${path}`, json);
+  return json;
 }
 
-/* ── Stable ID helper ─────────────────────────────────────── */
+/* ── Safe field reader — tries multiple possible key names ── */
+function pick(obj, ...keys) {
+  for (const k of keys) {
+    if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+  }
+  return undefined;
+}
+
+/* ── Stable slug ID ────────────────────────────────────────── */
 function toId(prefix, name) {
-  return `${prefix}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+  return `${prefix}-${String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
 }
 
-/* ── Status normaliser ────────────────────────────────────── */
+/* ── Status normaliser ─────────────────────────────────────── */
 function normaliseStatus(raw) {
-  if (!raw) return "unknown";
-  const s = raw.toString().toLowerCase();
-  if (s.includes("aktiv") || s.includes("active") || s === "1") return "active";
-  if (s.includes("likvidation") || s.includes("dissolved"))      return "dissolved";
+  if (raw === undefined || raw === null) return "unknown";
+  const s = String(raw).toLowerCase().trim();
+
+  // Active variants (Swedish + English + numeric)
+  if (
+    s === "aktiv"        ||
+    s === "active"       ||
+    s === "1"            ||
+    s === "true"         ||
+    s.includes("aktiv")  ||
+    s.includes("active") ||
+    s.includes("registrerat")
+  ) return "active";
+
+  // Dissolved variants
+  if (
+    s.includes("likvidation") ||
+    s.includes("avregistrerad") ||
+    s.includes("upplöst")      ||
+    s.includes("dissolved")    ||
+    s.includes("inactive")     ||
+    s === "0"                  ||
+    s === "false"
+  ) return "dissolved";
+
   return s;
 }
 
@@ -68,27 +96,36 @@ function normaliseStatus(raw) {
 
 /**
  * searchEntities(query)
- * Returns ALL results from BolagsAPI /search matching the query.
- * Falls back to mock data when no API key is set.
+ * Searches by company name or org number.
+ * Handles every known BolagsAPI array wrapper key.
  */
 export async function searchEntities(query) {
   if (USE_MOCK) return mockSearch(query);
 
   const data = await bolagsGet(`/search?q=${encodeURIComponent(query)}`);
 
-  // BolagsAPI may return { results:[...] }, { companies:[...] }, or a bare array
+  // BolagsAPI wraps results under different keys depending on version —
+  // try each one before falling back to treating the whole response as an array.
   const raw = Array.isArray(data)
     ? data
-    : (data.results ?? data.companies ?? data.hits ?? []);
+    : Array.isArray(data.results)    ? data.results
+    : Array.isArray(data.companies)  ? data.companies
+    : Array.isArray(data.hits)       ? data.hits
+    : Array.isArray(data.data)       ? data.data
+    : [];
 
-  if (!raw.length) return [];
+  console.log("[MIMR] Search raw items:", raw);
 
   return raw.map((c) => ({
-    id:           c.org_number,
-    name:         c.name,
-    regNumber:    c.org_number,
+    id:           pick(c, "org_number", "orgNumber", "organisationsnummer", "id"),
+    name:         pick(c, "name", "company_name", "namn", "companyName"),
+    regNumber:    pick(c, "org_number", "orgNumber", "organisationsnummer"),
     type:         "company",
-    status:       normaliseStatus(c.status),
+    // Try every known status field name — log the raw object above
+    // to see which one BolagsAPI actually sends for your account
+    status:       normaliseStatus(
+                    pick(c, "status", "company_status", "bolagsstatus", "active", "is_active")
+                  ),
     jurisdiction: "Sweden",
   }));
 }
@@ -96,88 +133,131 @@ export async function searchEntities(query) {
 /**
  * fetchEntityGraph(orgNumber)
  * Fetches company + board + owners + subsidiaries in parallel.
- * Assembles into { entity, nodes, edges } for Cytoscape.
  */
 export async function fetchEntityGraph(orgNumber) {
   if (USE_MOCK) return mockEntityGraph(orgNumber);
 
   const [company, boardData, ownersData, subsData] = await Promise.all([
     bolagsGet(`/company/${orgNumber}`),
-    bolagsGet(`/company/${orgNumber}/board`).catch(()         => ({ members: [] })),
-    bolagsGet(`/company/${orgNumber}/owners`).catch(()        => ({ owners:  [] })),
-    bolagsGet(`/company/${orgNumber}/subsidiaries`).catch(()  => ({ subsidiaries: [] })),
+    bolagsGet(`/company/${orgNumber}/board`).catch((e) => {
+      console.warn("[MIMR] board endpoint error:", e.message);
+      return {};
+    }),
+    bolagsGet(`/company/${orgNumber}/owners`).catch((e) => {
+      console.warn("[MIMR] owners endpoint error:", e.message);
+      return {};
+    }),
+    bolagsGet(`/company/${orgNumber}/subsidiaries`).catch((e) => {
+      console.warn("[MIMR] subsidiaries endpoint error:", e.message);
+      return {};
+    }),
   ]);
 
-  const board        = boardData.members        ?? boardData.board        ?? [];
-  const owners       = ownersData.owners        ?? ownersData.shareholders ?? [];
-  const subsidiaries = subsData.subsidiaries    ?? subsData.companies     ?? [];
-  const rootId       = company.org_number;
+  // ── Extract arrays from whatever wrapper key the API used ──
+  const board = (
+    pick(boardData,  "members", "board", "styrelse", "data", "results") ??
+    (Array.isArray(boardData) ? boardData : [])
+  );
 
+  const owners = (
+    pick(ownersData, "owners", "shareholders", "agare", "data", "results") ??
+    (Array.isArray(ownersData) ? ownersData : [])
+  );
+
+  const subsidiaries = (
+    pick(subsData,   "subsidiaries", "companies", "dotterbolag", "data", "results") ??
+    (Array.isArray(subsData) ? subsData : [])
+  );
+
+  // ── Root company ID ────────────────────────────────────────
+  const rootId = pick(company, "org_number", "orgNumber", "organisationsnummer") ?? orgNumber;
+
+  // ── Nodes ──────────────────────────────────────────────────
   const nodes = [
+    // Root company
     {
       id:     rootId,
-      label:  company.name,
+      label:  pick(company, "name", "company_name", "namn") ?? orgNumber,
       type:   "company",
-      status: normaliseStatus(company.status),
+      status: normaliseStatus(
+                pick(company, "status", "company_status", "bolagsstatus", "active", "is_active")
+              ),
     },
-    ...board.map((m) => ({
-      id:    m.id ? `person-${m.id}` : toId("person", m.name),
-      label: m.name,
-      type:  "director",
-      role:  m.role ?? m.title ?? "Board member",
-    })),
-    ...owners.map((o) => ({
-      id:        o.org_number ?? toId("owner", o.name),
-      label:     o.name,
-      type:      "shareholder",
-      ownership: o.share_percent != null ? `${o.share_percent}%` : "",
-    })),
+
+    // Board members → director nodes
+    ...board.map((m) => {
+      const personId = pick(m, "id", "person_id") ? `person-${pick(m, "id", "person_id")}` : toId("person", pick(m, "name", "namn") ?? "unknown");
+      return {
+        id:    personId,
+        label: pick(m, "name", "full_name", "namn") ?? "Unknown",
+        type:  "director",
+        role:  pick(m, "role", "title", "befattning", "roll") ?? "Board member",
+      };
+    }),
+
+    // Owners → shareholder nodes
+    ...owners.map((o) => {
+      const ownerId = pick(o, "org_number", "orgNumber") ?? toId("owner", pick(o, "name", "namn") ?? "unknown");
+      const pct     = pick(o, "share_percent", "sharePercent", "andel", "ownership_percent", "shares");
+      return {
+        id:        ownerId,
+        label:     pick(o, "name", "company_name", "namn") ?? "Unknown owner",
+        type:      "shareholder",
+        ownership: pct != null ? `${pct}%` : "",
+      };
+    }),
+
+    // Subsidiaries → subsidiary nodes
     ...subsidiaries.map((s) => ({
-      id:     s.org_number,
-      label:  s.name,
+      id:     pick(s, "org_number", "orgNumber") ?? toId("sub", pick(s, "name", "namn") ?? "unknown"),
+      label:  pick(s, "name", "company_name", "namn") ?? "Unknown subsidiary",
       type:   "subsidiary",
-      status: normaliseStatus(s.status),
+      status: normaliseStatus(pick(s, "status", "company_status", "bolagsstatus", "active")),
     })),
   ];
 
+  // ── Edges ──────────────────────────────────────────────────
   const edges = [
-    ...board.map((m, i) => ({
-      id:           `e-board-${i}`,
-      source:       m.id ? `person-${m.id}` : toId("person", m.name),
-      target:       rootId,
-      relationship: "DIRECTOR_OF",
-    })),
-    ...owners.map((o, i) => ({
-      id:           `e-owner-${i}`,
-      source:       o.org_number ?? toId("owner", o.name),
-      target:       rootId,
-      relationship: "SHAREHOLDER_OF",
-    })),
-    ...subsidiaries.map((s, i) => ({
-      id:           `e-sub-${i}`,
-      source:       rootId,
-      target:       s.org_number,
-      relationship: "SUBSIDIARY_OF",
-    })),
+    ...board.map((m, i) => {
+      const personId = pick(m, "id", "person_id") ? `person-${pick(m, "id", "person_id")}` : toId("person", pick(m, "name", "namn") ?? "unknown");
+      return { id: `e-board-${i}`, source: personId, target: rootId, relationship: "DIRECTOR_OF" };
+    }),
+    ...owners.map((o, i) => {
+      const ownerId = pick(o, "org_number", "orgNumber") ?? toId("owner", pick(o, "name", "namn") ?? "unknown");
+      return { id: `e-owner-${i}`, source: ownerId, target: rootId, relationship: "SHAREHOLDER_OF" };
+    }),
+    ...subsidiaries.map((s, i) => {
+      const subId = pick(s, "org_number", "orgNumber") ?? toId("sub", pick(s, "name", "namn") ?? "unknown");
+      return { id: `e-sub-${i}`, source: rootId, target: subId, relationship: "SUBSIDIARY_OF" };
+    }),
   ];
 
-  const addr = company.address ?? {};
+  // ── EntityDetail for header + detail panel ─────────────────
+  const addr = pick(company, "address", "adress") ?? {};
+  const fullAddress = [
+    pick(addr, "street", "gata", "street_address"),
+    pick(addr, "postal_code", "postalCode", "postnummer"),
+    pick(addr, "city", "stad", "postort"),
+  ].filter(Boolean).join(", ");
+
   const entity = {
     id:             rootId,
-    name:           company.name,
-    regNumber:      company.org_number,
+    name:           pick(company, "name", "company_name", "namn") ?? orgNumber,
+    regNumber:      rootId,
     type:           "company",
-    status:         normaliseStatus(company.status),
+    status:         normaliseStatus(
+                      pick(company, "status", "company_status", "bolagsstatus", "active", "is_active")
+                    ),
     jurisdiction:   "Sweden",
-    incorporated:   company.registration_date ?? "",
-    address:        [addr.street, addr.postal_code, addr.city].filter(Boolean).join(", "),
-    sicCode:        company.sni_code           ?? "",
-    sicDescription: company.industry           ?? "",
-    latestAccounts: company.latest_accounts    ?? "",
+    incorporated:   pick(company, "registration_date", "registrationDate", "registreringsdatum") ?? "",
+    address:        fullAddress,
+    sicCode:        pick(company, "sni_code", "sniCode", "sni") ?? "",
+    sicDescription: pick(company, "industry", "sni_text", "bransch") ?? "",
+    latestAccounts: pick(company, "latest_accounts", "latestAccounts", "senaste_arsredovisning") ?? "",
     officers: board.map((m) => ({
-      name:      m.name,
-      role:      m.role ?? m.title ?? "Board member",
-      appointed: m.from_date ?? "",
+      name:      pick(m, "name", "full_name", "namn") ?? "Unknown",
+      role:      pick(m, "role", "title", "befattning", "roll") ?? "Board member",
+      appointed: pick(m, "from_date", "fromDate", "from", "appointed_date") ?? "",
     })),
   };
 
@@ -186,56 +266,60 @@ export async function fetchEntityGraph(orgNumber) {
 
 /**
  * expandNode(orgNumber)
- * Called on double-click. Loads one more hop of connections.
+ * Loads one more hop of connections when user double-clicks a node.
  */
 export async function expandNode(orgNumber) {
   if (USE_MOCK) return mockExpandNode(orgNumber);
 
-  if (orgNumber.startsWith("person-") || orgNumber.startsWith("owner-")) {
+  // Person / owner nodes have no company endpoint — skip silently
+  if (
+    String(orgNumber).startsWith("person-") ||
+    String(orgNumber).startsWith("owner-")
+  ) {
     return { nodes: [], edges: [] };
   }
 
   const [boardData, ownersData, subsData] = await Promise.all([
-    bolagsGet(`/company/${orgNumber}/board`).catch(()        => ({ members: [] })),
-    bolagsGet(`/company/${orgNumber}/owners`).catch(()       => ({ owners:  [] })),
-    bolagsGet(`/company/${orgNumber}/subsidiaries`).catch(() => ({ subsidiaries: [] })),
+    bolagsGet(`/company/${orgNumber}/board`).catch(() => ({})),
+    bolagsGet(`/company/${orgNumber}/owners`).catch(() => ({})),
+    bolagsGet(`/company/${orgNumber}/subsidiaries`).catch(() => ({})),
   ]);
 
-  const board        = boardData.members     ?? [];
-  const owners       = ownersData.owners     ?? [];
-  const subsidiaries = subsData.subsidiaries ?? [];
+  const board        = pick(boardData,  "members", "board", "styrelse", "data") ?? (Array.isArray(boardData) ? boardData : []);
+  const owners       = pick(ownersData, "owners", "shareholders", "agare", "data") ?? (Array.isArray(ownersData) ? ownersData : []);
+  const subsidiaries = pick(subsData,   "subsidiaries", "companies", "dotterbolag", "data") ?? (Array.isArray(subsData) ? subsData : []);
 
   const nodes = [
-    ...board.map((m) => ({
-      id:    m.id ? `person-${m.id}` : toId("person", m.name),
-      label: m.name, type: "director", role: m.role ?? "Board member",
-    })),
-    ...owners.map((o) => ({
-      id:        o.org_number ?? toId("owner", o.name),
-      label:     o.name, type: "shareholder",
-      ownership: o.share_percent != null ? `${o.share_percent}%` : "",
-    })),
+    ...board.map((m) => {
+      const pid = pick(m, "id", "person_id") ? `person-${pick(m, "id", "person_id")}` : toId("person", pick(m, "name", "namn") ?? "unknown");
+      return { id: pid, label: pick(m, "name", "full_name", "namn") ?? "Unknown", type: "director", role: pick(m, "role", "title", "befattning") ?? "Board member" };
+    }),
+    ...owners.map((o) => {
+      const oid = pick(o, "org_number", "orgNumber") ?? toId("owner", pick(o, "name", "namn") ?? "unknown");
+      const pct = pick(o, "share_percent", "sharePercent", "andel");
+      return { id: oid, label: pick(o, "name", "company_name", "namn") ?? "Unknown", type: "shareholder", ownership: pct != null ? `${pct}%` : "" };
+    }),
     ...subsidiaries.map((s) => ({
-      id:     s.org_number, label: s.name,
-      type:   "subsidiary", status: normaliseStatus(s.status),
+      id:     pick(s, "org_number", "orgNumber") ?? toId("sub", pick(s, "name", "namn") ?? "unknown"),
+      label:  pick(s, "name", "company_name", "namn") ?? "Unknown",
+      type:   "subsidiary",
+      status: normaliseStatus(pick(s, "status", "company_status", "active")),
     })),
   ];
 
   const edges = [
-    ...board.map((m, i) => ({
-      id: `ex-board-${orgNumber}-${i}`,
-      source: m.id ? `person-${m.id}` : toId("person", m.name),
-      target: orgNumber, relationship: "DIRECTOR_OF",
-    })),
-    ...owners.map((o, i) => ({
-      id: `ex-owner-${orgNumber}-${i}`,
-      source: o.org_number ?? toId("owner", o.name),
-      target: orgNumber, relationship: "SHAREHOLDER_OF",
-    })),
-    ...subsidiaries.map((s, i) => ({
-      id: `ex-sub-${orgNumber}-${i}`,
-      source: orgNumber, target: s.org_number, relationship: "SUBSIDIARY_OF",
-    })),
+    ...board.map((m, i) => {
+      const pid = pick(m, "id", "person_id") ? `person-${pick(m, "id", "person_id")}` : toId("person", pick(m, "name", "namn") ?? "unknown");
+      return { id: `ex-board-${orgNumber}-${i}`, source: pid, target: orgNumber, relationship: "DIRECTOR_OF" };
+    }),
+    ...owners.map((o, i) => {
+      const oid = pick(o, "org_number", "orgNumber") ?? toId("owner", pick(o, "name", "namn") ?? "unknown");
+      return { id: `ex-owner-${orgNumber}-${i}`, source: oid, target: orgNumber, relationship: "SHAREHOLDER_OF" };
+    }),
+    ...subsidiaries.map((s, i) => {
+      const sid = pick(s, "org_number", "orgNumber") ?? toId("sub", pick(s, "name", "namn") ?? "unknown");
+      return { id: `ex-sub-${orgNumber}-${i}`, source: orgNumber, target: sid, relationship: "SUBSIDIARY_OF" };
+    }),
   ];
 
   return { nodes, edges };
@@ -246,18 +330,14 @@ export async function expandNode(orgNumber) {
 ═══════════════════════════════════════════════════════════ */
 
 const MOCK_COMPANIES = [
-  { id: "5592058798", name: "Spotify AB",              regNumber: "5592058798", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5590123456", name: "Spotify Technology SA",   regNumber: "5590123456", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5593001122", name: "Spotify Studios AB",      regNumber: "5593001122", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5560123456", name: "IKEA of Sweden AB",       regNumber: "5560123456", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5580001234", name: "Ingka Group BV",           regNumber: "5580001234", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5561000111", name: "IKEA Supply AG",           regNumber: "5561000111", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5561000222", name: "IKEA Industry AB",         regNumber: "5561000222", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5567890123", name: "Klarna Bank AB",           regNumber: "5567890123", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5512345678", name: "Volvo Cars AB",            regNumber: "5512345678", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5598765432", name: "H&M Hennes & Mauritz AB",  regNumber: "5598765432", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5534567890", name: "Ericsson AB",              regNumber: "5534567890", type: "company", status: "active", jurisdiction: "Sweden" },
-  { id: "5545678901", name: "Sandvik AB",               regNumber: "5545678901", type: "company", status: "active", jurisdiction: "Sweden" },
+  { id: "5592058798", name: "Spotify AB",             regNumber: "5592058798", type: "company", status: "active", jurisdiction: "Sweden" },
+  { id: "5590123456", name: "Spotify Technology SA",  regNumber: "5590123456", type: "company", status: "active", jurisdiction: "Sweden" },
+  { id: "5593001122", name: "Spotify Studios AB",     regNumber: "5593001122", type: "company", status: "active", jurisdiction: "Sweden" },
+  { id: "5560123456", name: "IKEA of Sweden AB",      regNumber: "5560123456", type: "company", status: "active", jurisdiction: "Sweden" },
+  { id: "5567890123", name: "Klarna Bank AB",          regNumber: "5567890123", type: "company", status: "active", jurisdiction: "Sweden" },
+  { id: "5512345678", name: "Volvo Cars AB",           regNumber: "5512345678", type: "company", status: "active", jurisdiction: "Sweden" },
+  { id: "5598765432", name: "H&M Hennes & Mauritz AB", regNumber: "5598765432", type: "company", status: "active", jurisdiction: "Sweden" },
+  { id: "5534567890", name: "Ericsson AB",             regNumber: "5534567890", type: "company", status: "active", jurisdiction: "Sweden" },
 ];
 
 const MOCK_GRAPHS = {
@@ -271,96 +351,26 @@ const MOCK_GRAPHS = {
       officers: [
         { name: "Daniel Ek",        role: "CEO",      appointed: "2006-04-18" },
         { name: "Martin Lorentzon", role: "Chairman", appointed: "2006-04-18" },
-        { name: "Paul Vogel",       role: "CFO",      appointed: "2020-01-01" },
       ],
     },
     nodes: [
-      { id: "5592058798",        label: "Spotify AB",             type: "company",     status: "active"  },
-      { id: "5590123456",        label: "Spotify Technology SA",  type: "parent",      status: "active"  },
-      { id: "5593001122",        label: "Spotify Studios AB",     type: "subsidiary",  status: "active"  },
-      { id: "5593009988",        label: "Soundtrack Your Brand",  type: "subsidiary",  status: "active"  },
-      { id: "person-daniel-ek",         label: "Daniel Ek",        type: "director",    role: "CEO"       },
-      { id: "person-martin-lorentzon",  label: "Martin Lorentzon", type: "director",    role: "Chairman"  },
-      { id: "person-paul-vogel",        label: "Paul Vogel",       type: "director",    role: "CFO"       },
-      { id: "owner-tencent",            label: "Tencent Holdings", type: "shareholder", ownership: "9.1%" },
-      { id: "owner-baillie",            label: "Baillie Gifford",  type: "shareholder", ownership: "5.8%" },
+      { id: "5592058798",       label: "Spotify AB",            type: "company",     status: "active"  },
+      { id: "5590123456",       label: "Spotify Technology SA", type: "parent",      status: "active"  },
+      { id: "5593001122",       label: "Spotify Studios AB",    type: "subsidiary",  status: "active"  },
+      { id: "person-daniel",    label: "Daniel Ek",             type: "director",    role: "CEO"       },
+      { id: "person-martin",    label: "Martin Lorentzon",      type: "director",    role: "Chairman"  },
+      { id: "owner-tencent",    label: "Tencent Holdings",      type: "shareholder", ownership: "9.1%" },
     ],
     edges: [
-      { id: "e1", source: "5590123456",                   target: "5592058798", relationship: "PARENT_OF"      },
-      { id: "e2", source: "5592058798",                   target: "5593001122", relationship: "SUBSIDIARY_OF"  },
-      { id: "e3", source: "5592058798",                   target: "5593009988", relationship: "SUBSIDIARY_OF"  },
-      { id: "e4", source: "person-daniel-ek",             target: "5592058798", relationship: "DIRECTOR_OF"    },
-      { id: "e5", source: "person-martin-lorentzon",      target: "5592058798", relationship: "DIRECTOR_OF"    },
-      { id: "e6", source: "person-paul-vogel",            target: "5592058798", relationship: "DIRECTOR_OF"    },
-      { id: "e7", source: "owner-tencent",                target: "5592058798", relationship: "SHAREHOLDER_OF" },
-      { id: "e8", source: "owner-baillie",                target: "5592058798", relationship: "SHAREHOLDER_OF" },
-    ],
-  },
-
-  "5560123456": {
-    entity: {
-      id: "5560123456", name: "IKEA of Sweden AB", regNumber: "5560123456",
-      type: "company", status: "active", jurisdiction: "Sweden",
-      incorporated: "1943-07-28", address: "Box 702, 343 81, Älmhult",
-      sicCode: "4759", sicDescription: "Retail of furniture and household articles",
-      latestAccounts: "2023-08-31",
-      officers: [
-        { name: "Jesper Brodin",         role: "CEO",      appointed: "2017-09-01" },
-        { name: "Lars-Johan Jarnheimer", role: "Chairman", appointed: "2018-01-01" },
-      ],
-    },
-    nodes: [
-      { id: "5560123456",        label: "IKEA of Sweden AB",          type: "company",     status: "active"  },
-      { id: "5580001234",        label: "Ingka Group BV",              type: "parent",      status: "active"  },
-      { id: "5561000111",        label: "IKEA Supply AG",              type: "subsidiary",  status: "active"  },
-      { id: "5561000222",        label: "IKEA Industry AB",            type: "subsidiary",  status: "active"  },
-      { id: "person-jesper",            label: "Jesper Brodin",         type: "director",    role: "CEO"       },
-      { id: "person-lars",              label: "Lars-Johan Jarnheimer", type: "director",    role: "Chairman"  },
-      { id: "owner-stichting",          label: "Stichting INGKA Foundation", type: "shareholder", ownership: "100%" },
-    ],
-    edges: [
-      { id: "e1", source: "5580001234",     target: "5560123456", relationship: "PARENT_OF"      },
-      { id: "e2", source: "5560123456",     target: "5561000111", relationship: "SUBSIDIARY_OF"  },
-      { id: "e3", source: "5560123456",     target: "5561000222", relationship: "SUBSIDIARY_OF"  },
-      { id: "e4", source: "person-jesper",  target: "5560123456", relationship: "DIRECTOR_OF"    },
-      { id: "e5", source: "person-lars",    target: "5560123456", relationship: "DIRECTOR_OF"    },
-      { id: "e6", source: "owner-stichting",target: "5560123456", relationship: "SHAREHOLDER_OF" },
-    ],
-  },
-
-  "5567890123": {
-    entity: {
-      id: "5567890123", name: "Klarna Bank AB", regNumber: "5567890123",
-      type: "company", status: "active", jurisdiction: "Sweden",
-      incorporated: "2005-01-10", address: "Sveavägen 46, 111 34, Stockholm",
-      sicCode: "6419", sicDescription: "Other monetary intermediation",
-      latestAccounts: "2023-12-31",
-      officers: [
-        { name: "Sebastian Siemiatkowski", role: "CEO",      appointed: "2005-01-10" },
-        { name: "Victor Jacobsson",        role: "Co-founder", appointed: "2005-01-10" },
-      ],
-    },
-    nodes: [
-      { id: "5567890123",         label: "Klarna Bank AB",              type: "company",     status: "active"  },
-      { id: "5567000001",         label: "Klarna Inc (USA)",            type: "subsidiary",  status: "active"  },
-      { id: "5567000002",         label: "Klarna GmbH",                 type: "subsidiary",  status: "active"  },
-      { id: "person-sebastian",           label: "Sebastian Siemiatkowski", type: "director",    role: "CEO"       },
-      { id: "person-victor",              label: "Victor Jacobsson",       type: "director",    role: "Co-founder"},
-      { id: "owner-sequoia",              label: "Sequoia Capital",        type: "shareholder", ownership: "22%"  },
-      { id: "owner-softbank",             label: "SoftBank Vision Fund",   type: "shareholder", ownership: "18%"  },
-    ],
-    edges: [
-      { id: "e1", source: "5567890123",      target: "5567000001", relationship: "SUBSIDIARY_OF"  },
-      { id: "e2", source: "5567890123",      target: "5567000002", relationship: "SUBSIDIARY_OF"  },
-      { id: "e3", source: "person-sebastian",target: "5567890123", relationship: "DIRECTOR_OF"    },
-      { id: "e4", source: "person-victor",   target: "5567890123", relationship: "DIRECTOR_OF"    },
-      { id: "e5", source: "owner-sequoia",   target: "5567890123", relationship: "SHAREHOLDER_OF" },
-      { id: "e6", source: "owner-softbank",  target: "5567890123", relationship: "SHAREHOLDER_OF" },
+      { id: "e1", source: "5590123456",    target: "5592058798", relationship: "PARENT_OF"      },
+      { id: "e2", source: "5592058798",    target: "5593001122", relationship: "SUBSIDIARY_OF"  },
+      { id: "e3", source: "person-daniel", target: "5592058798", relationship: "DIRECTOR_OF"    },
+      { id: "e4", source: "person-martin", target: "5592058798", relationship: "DIRECTOR_OF"    },
+      { id: "e5", source: "owner-tencent", target: "5592058798", relationship: "SHAREHOLDER_OF" },
     ],
   },
 };
 
-/* ── Mock search: matches name OR org number, returns ALL hits ── */
 function mockSearch(query) {
   const q = query.trim().toLowerCase().replace(/[\s-]/g, "");
   return new Promise((resolve) =>
@@ -374,29 +384,23 @@ function mockSearch(query) {
   );
 }
 
-/* ── Mock graph: returns full graph or Spotify fallback ── */
 function mockEntityGraph(id) {
   return new Promise((resolve) =>
-    setTimeout(() => {
-      resolve(MOCK_GRAPHS[id] ?? MOCK_GRAPHS["5592058798"]);
-    }, 550)
+    setTimeout(() => resolve(MOCK_GRAPHS[id] ?? MOCK_GRAPHS["5592058798"]), 550)
   );
 }
 
-/* ── Mock expand: adds two generic child nodes ── */
 function mockExpandNode(nodeId) {
   return new Promise((resolve) =>
-    setTimeout(() => {
-      resolve({
-        nodes: [
-          { id: `${nodeId}-x1`, label: "Related Entity A", type: "subsidiary", status: "active" },
-          { id: `${nodeId}-x2`, label: "Related Entity B", type: "subsidiary", status: "active" },
-        ],
-        edges: [
-          { id: `ex-1`, source: nodeId, target: `${nodeId}-x1`, relationship: "SUBSIDIARY_OF" },
-          { id: `ex-2`, source: nodeId, target: `${nodeId}-x2`, relationship: "SUBSIDIARY_OF" },
-        ],
-      });
-    }, 450)
+    setTimeout(() => resolve({
+      nodes: [
+        { id: `${nodeId}-x1`, label: "Related Entity A", type: "subsidiary", status: "active" },
+        { id: `${nodeId}-x2`, label: "Related Entity B", type: "subsidiary", status: "active" },
+      ],
+      edges: [
+        { id: "ex-1", source: nodeId, target: `${nodeId}-x1`, relationship: "SUBSIDIARY_OF" },
+        { id: "ex-2", source: nodeId, target: `${nodeId}-x2`, relationship: "SUBSIDIARY_OF" },
+      ],
+    }), 450)
   );
 }
