@@ -64,6 +64,7 @@ export const MOCK_ENTITIES = [
 ];
 
 // Connection-type colour legend
+//TODO : In a real application, this would likely be dynamically generated based on the types of connections present in the data, and could include more connection types and colors
 export const CONNECTION_LEGEND = [
   { color: "#4fc3c3", label: "Subsidiary / Child entity" },
   { color: "#c9a84c", label: "Director / Officer" },

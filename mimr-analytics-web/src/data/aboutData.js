@@ -47,7 +47,6 @@ export const VALUES = [
     desc: "Designed by people who have sat at the analyst's desk. Every feature exists to reduce friction in real investigative workflows.",
   },
 ];
-
 export const COVERAGE = [
   { label: "UK Companies House",      pct: 100, color: "#c9a84c" },
   { label: "EU Business Registers",   pct: 87,  color: "#8b7cf6" },
