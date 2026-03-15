@@ -22,8 +22,8 @@ npm --version    # should be 9+
 
 ```bash
 # 1. Unzip or clone the project
-unzip mimr-analytics.zip
-cd mimr-analytics
+unzip mimr-analytics-web-platfrom.zip
+cd mimr-analytics-web-platfrom
 
 # 2. Install all dependencies (React, Cytoscape.js, Vite)
 npm install
