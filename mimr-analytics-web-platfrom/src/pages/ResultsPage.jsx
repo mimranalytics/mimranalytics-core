@@ -1,11 +1,12 @@
 /**
  * ResultsPage.jsx
  * ─────────────────────────────────────────────────────────────
- * Search results page showing:
- *   - Inline search bar for new queries
- *   - Cytoscape.js corporate graph (full interactions)
- *   - Entity card list with registration details
- *   - Connections panel for selected entity
+ * Fixes vs previous version:
+ *   - CorporateGraph gets key={selectedEntity.id} so React fully
+ *     unmounts + remounts Cytoscape when the user picks a different
+ *     entity — without this the graph stays frozen on the first result
+ *   - Error state shown if search fails
+ *   - "No results" state shown when query returns empty
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -21,36 +22,48 @@ import { CONNECTION_LEGEND } from "../data/mockData";
 export default function ResultsPage() {
   const { searchQuery, activeResult, setActiveResult, setAuthMode, navigate } = useApp();
 
-  const [searchResults,  setSearchResults]  = useState([]);
-  const [loadingSearch,  setLoadingSearch]  = useState(false);
-  const [selectedEntity, setSelectedEntity] = useState(null);
+  const [searchResults,    setSearchResults]    = useState([]);
+  const [loadingSearch,    setLoadingSearch]    = useState(false);
+  const [searchError,      setSearchError]      = useState(null);
+  const [selectedEntity,   setSelectedEntity]   = useState(null);
   const [selectedNodeData, setSelectedNodeData] = useState(null);
 
-  /* ── Fetch entity list from search query ── */
+  /* ── Run search whenever the query changes ── */
   useEffect(() => {
     if (!searchQuery) return;
+
+    let cancelled = false;
     setLoadingSearch(true);
+    setSearchError(null);
+    setSearchResults([]);
+    setSelectedEntity(null);
+    setSelectedNodeData(null);
 
     searchEntities(searchQuery)
       .then((results) => {
+        if (cancelled) return;
         setSearchResults(results);
         if (results.length > 0) {
           setSelectedEntity(results[0]);
           setActiveResult(0);
         }
       })
-      .catch(console.error)
-      .finally(() => setLoadingSearch(false));
+      .catch((err) => {
+        if (cancelled) return;
+        setSearchError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSearch(false);
+      });
+
+    return () => { cancelled = true; };
   }, [searchQuery]);
 
+  /* ── Clicking an entity card swaps the graph ── */
   const handleEntityClick = (entity, index) => {
     setSelectedEntity(entity);
     setActiveResult(index);
-    setSelectedNodeData(null);
-  };
-
-  const handleNodeSelect = (nodeData) => {
-    setSelectedNodeData(nodeData);
+    setSelectedNodeData(null);   // clear any node selection from the old graph
   };
 
   return (
@@ -60,39 +73,42 @@ export default function ResultsPage() {
 
       <div className="results-page">
 
-        {/* ── Search bar ── */}
+        {/* Search bar */}
         <div style={{ marginBottom: 32, maxWidth: 680 }}>
           <SearchBar />
         </div>
 
-        {/* ── Page header ── */}
+        {/* Header */}
         <div className="results-header">
           <div className="results-query">Results for "{searchQuery}"</div>
           <div className="results-meta" style={{ marginTop: 6 }}>
-            {loadingSearch
-              ? "Searching…"
-              : `${searchResults.length} entities found · Graph depth: 2 hops`}
+            {loadingSearch && "Searching…"}
+            {!loadingSearch && searchError && `Error: ${searchError}`}
+            {!loadingSearch && !searchError && `${searchResults.length} ${searchResults.length === 1 ? "entity" : "entities"} found`}
           </div>
         </div>
 
-        {/* ── Main layout ── */}
         <div className="results-layout">
 
-          {/* LEFT: Graph + entity list */}
+          {/* LEFT: Graph + entity cards */}
           <div>
-            {/* ── Cytoscape Graph ── */}
-            {selectedEntity ? (
+
+            {/* Graph — key forces a full remount when entity changes */}
+            {loadingSearch ? (
+              <GraphPlaceholder />
+            ) : selectedEntity ? (
               <div style={{ marginBottom: 28 }}>
                 <CorporateGraph
+                  key={selectedEntity.id}
                   entityId={selectedEntity.id}
-                  onNodeSelect={handleNodeSelect}
+                  onNodeSelect={setSelectedNodeData}
                 />
               </div>
-            ) : loadingSearch ? (
-              <GraphPlaceholder />
-            ) : null}
+            ) : !loadingSearch && !searchError && searchResults.length === 0 && (
+              <NoResults query={searchQuery} />
+            )}
 
-            {/* ── Entity cards ── */}
+            {/* Entity cards */}
             {loadingSearch ? (
               <SkeletonCards />
             ) : (
@@ -107,7 +123,7 @@ export default function ResultsPage() {
             )}
           </div>
 
-          {/* RIGHT: Connections / node panel */}
+          {/* RIGHT: Info panel + legend */}
           <div>
             <ConnectionsPanel
               entity={selectedEntity}
@@ -125,7 +141,8 @@ export default function ResultsPage() {
   );
 }
 
-/* ── Entity card ───────────────────────────────────────────── */
+/* ── Sub-components ──────────────────────────────────────── */
+
 function EntityCard({ entity, isActive, onClick }) {
   return (
     <div
@@ -150,9 +167,7 @@ function EntityCard({ entity, isActive, onClick }) {
   );
 }
 
-/* ── Connections panel ─────────────────────────────────────── */
 function ConnectionsPanel({ entity, nodeData, onExport }) {
-  // If a graph node is selected show that; otherwise show the entity summary
   const displayName = nodeData?.label || entity?.name || "—";
   const isNode      = !!nodeData;
 
@@ -166,31 +181,33 @@ function ConnectionsPanel({ entity, nodeData, onExport }) {
         {displayName}
       </div>
 
-      {isNode && nodeData.type && (
+      {isNode && (
         <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-2)", marginBottom: 16, letterSpacing: "0.06em", textTransform: "uppercase" }}>
           {nodeData.type}
         </div>
       )}
 
-      {isNode ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-          {nodeData.role      && <PanelField label="Role"       value={nodeData.role} />}
-          {nodeData.ownership && <PanelField label="Ownership"  value={nodeData.ownership} />}
-          {nodeData.status    && <PanelField label="Status"     value={nodeData.status} />}
-        </div>
-      ) : entity ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-          {entity.regNumber    && <PanelField label="Reg. No."     value={entity.regNumber} />}
-          {entity.jurisdiction && <PanelField label="Jurisdiction" value={entity.jurisdiction} />}
-          {entity.status       && <PanelField label="Status"       value={entity.status} />}
-        </div>
-      ) : (
-        <div style={{ color: "var(--text-3)", fontSize: 13, fontFamily: "var(--mono)", padding: "20px 0" }}>
-          Click a node on the graph or select an entity below.
-        </div>
-      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+        {isNode ? (
+          <>
+            {nodeData.role      && <PanelField label="Role"       value={nodeData.role} />}
+            {nodeData.ownership && <PanelField label="Ownership"  value={nodeData.ownership} />}
+            {nodeData.status    && <PanelField label="Status"     value={nodeData.status} />}
+          </>
+        ) : entity ? (
+          <>
+            {entity.regNumber    && <PanelField label="Reg. No."     value={entity.regNumber} />}
+            {entity.jurisdiction && <PanelField label="Jurisdiction" value={entity.jurisdiction} />}
+            {entity.status       && <PanelField label="Status"       value={entity.status} />}
+          </>
+        ) : (
+          <div style={{ color: "var(--text-3)", fontSize: 13, fontFamily: "var(--mono)", padding: "12px 0" }}>
+            Select a result or click a graph node to inspect it.
+          </div>
+        )}
+      </div>
 
-      <button className="btn-gold" style={{ width: "100%", marginTop: 8 }} onClick={onExport}>
+      <button className="btn-gold" style={{ width: "100%", marginTop: 4 }} onClick={onExport}>
         Export full graph →
       </button>
     </div>
@@ -206,7 +223,6 @@ function PanelField({ label, value }) {
   );
 }
 
-/* ── Legend ────────────────────────────────────────────────── */
 function Legend() {
   return (
     <div style={{ background: "var(--navy-2)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, marginTop: 16 }}>
@@ -223,11 +239,24 @@ function Legend() {
   );
 }
 
-/* ── Placeholder states ─────────────────────────────────────── */
 function GraphPlaceholder() {
   return (
-    <div style={{ height: 380, background: "var(--navy-2)", border: "1px solid var(--border)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 28 }}>
-      <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-3)", letterSpacing: "0.12em" }}>Loading graph…</div>
+    <div style={{ height: 400, background: "var(--navy-2)", border: "1px solid var(--border)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 28 }}>
+      <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-3)", letterSpacing: "0.12em" }}>
+        Loading graph…
+      </div>
+    </div>
+  );
+}
+
+function NoResults({ query }) {
+  return (
+    <div style={{ background: "var(--navy-2)", border: "1px solid var(--border)", borderRadius: 12, padding: "48px 32px", textAlign: "center", marginBottom: 28 }}>
+      <div style={{ fontSize: 28, marginBottom: 16, color: "var(--text-3)" }}>○</div>
+      <div style={{ fontFamily: "var(--serif)", fontSize: 20, fontWeight: 700, marginBottom: 8 }}>No results found</div>
+      <div style={{ fontSize: 13, color: "var(--text-2)" }}>
+        No companies matched "{query}". Try a different name or a 10-digit Swedish org number.
+      </div>
     </div>
   );
 }
@@ -236,9 +265,9 @@ function SkeletonCards() {
   return (
     <>
       {[1, 2, 3].map((i) => (
-        <div key={i} className="entity-card" style={{ opacity: 0.4, pointerEvents: "none" }}>
-          <div style={{ height: 16, width: "40%", background: "var(--navy-4)", borderRadius: 4, marginBottom: 10 }} />
-          <div style={{ height: 12, width: "60%", background: "var(--navy-3)", borderRadius: 4 }} />
+        <div key={i} className="entity-card" style={{ opacity: 0.35, pointerEvents: "none" }}>
+          <div style={{ height: 16, width: "45%", background: "var(--navy-4)", borderRadius: 4, marginBottom: 10 }} />
+          <div style={{ height: 12, width: "65%", background: "var(--navy-3)", borderRadius: 4 }} />
         </div>
       ))}
     </>
